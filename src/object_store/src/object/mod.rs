@@ -829,6 +829,16 @@ pub async fn parse_remote_object_store(
                     .monitored(metrics),
             )
         }
+
+        webhdfs if webhdfs.starts_with("webhdfs://") => {
+            let webhdfs = webhdfs.strip_prefix("webhdfs://").unwrap();
+            let (namenode, root) = webhdfs.split_once('@').unwrap();
+            ObjectStoreImpl::Opendal(
+                OpendalObjectStore::new_webhdfs_engine(namenode.to_string(), root.to_string())
+                    .unwrap()
+                    .monitored(metrics),
+            )
+        }
         oss if oss.starts_with("oss://") => {
             let oss = oss.strip_prefix("oss://").unwrap();
             let (bucket, root) = oss.split_once('@').unwrap();

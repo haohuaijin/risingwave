@@ -22,3 +22,5 @@ pub use hdfs::*;
 
 pub mod oss;
 pub use oss::*;
+pub mod webhdfs;
+pub use webhdfs::*;

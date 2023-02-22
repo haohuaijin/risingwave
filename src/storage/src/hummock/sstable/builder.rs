@@ -252,8 +252,7 @@ impl<W: SstableWriter, F: FilterBuilder> SstableBuilder<W, F> {
             })
         }
 
-        self.block_builder
-            .add(self.raw_key.as_ref(), self.raw_value.as_ref());
+        self.block_builder.add(full_key, self.raw_value.as_ref());
         self.last_table_stats.total_key_size += full_key.encoded_len() as i64;
         self.last_table_stats.total_value_size += value.encoded_len() as i64;
 

@@ -17,7 +17,7 @@ use std::io::{Read, Write};
 use std::ops::Range;
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use risingwave_hummock_sdk::key::MAX_KEY_LEN;
+use risingwave_hummock_sdk::key::{FullKey, MAX_KEY_LEN};
 use risingwave_hummock_sdk::KeyComparator;
 use {lz4, zstd};
 
@@ -271,20 +271,21 @@ impl BlockBuilder {
     /// # Panics
     ///
     /// Panic if key is not added in ASCEND order.
-    pub fn add(&mut self, key: &[u8], value: &[u8]) {
+    pub fn add(&mut self, full_key: &FullKey<impl AsRef<[u8]>>, value: &[u8]) {
+        let key = full_key.encode();
         if self.entry_count > 0 {
             debug_assert!(!key.is_empty());
             debug_assert_eq!(
-                KeyComparator::compare_encoded_full_key(&self.last_key[..], key),
+                KeyComparator::compare_encoded_full_key(&self.last_key[..], &key),
                 Ordering::Less
             );
         }
         // Update restart point if needed and calculate diff key.
         let diff_key = if self.entry_count % self.restart_count == 0 {
             self.restart_points.push(self.buf.len() as u32);
-            key
+            &key
         } else {
-            bytes_diff_below_max_key_length(&self.last_key, key)
+            bytes_diff_below_max_key_length(&self.last_key, &key)
         };
 
         let prefix = KeyPrefix {
@@ -295,11 +296,11 @@ impl BlockBuilder {
         };
 
         prefix.encode(&mut self.buf);
-        self.buf.put_slice(diff_key);
+        self.buf.put_slice(&diff_key);
         self.buf.put_slice(value);
 
         self.last_key.clear();
-        self.last_key.extend_from_slice(key);
+        self.last_key.extend_from_slice(&key);
         self.entry_count += 1;
     }
 

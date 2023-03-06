@@ -297,6 +297,12 @@ impl Default for StreamingConfig {
 /// The section `[storage]` in `risingwave.toml`.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StorageConfig {
+    #[serde(default = "default::storage::wkx_operator_cache_capacity_mb")]
+    pub wkx_operator_cache_capacity_mb: usize,
+
+    #[serde(default = "default::storage::wkx_max_memory_manager_step")]
+    pub wkx_max_memory_manager_step: usize,
+
     // TODO(zhidong): Remove in 0.1.18 release
     // NOTE: It is now a system parameter and should not be used directly.
     /// Target size of the Sstable.
@@ -575,7 +581,14 @@ mod default {
     }
 
     pub mod storage {
+        pub fn wkx_operator_cache_capacity_mb() -> usize {
+            1536
+        }
 
+        pub fn wkx_max_memory_manager_step() -> usize {
+            2
+        }
+        
         pub fn sst_size_mb() -> u32 {
             256
         }

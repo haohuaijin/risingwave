@@ -627,6 +627,7 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
         yield Message::Barrier(barrier);
         let actor_id_str = self.ctx.id.to_string();
         let mut start_time = minstant::Instant::now();
+        let mut epoch_start_time = minstant::Instant::now();
 
         while let Some(msg) = aligned_stream
             .next()
@@ -637,6 +638,8 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
                 .join_actor_input_waiting_duration_ns
                 .with_label_values(&[&actor_id_str])
                 .inc_by(start_time.elapsed().as_nanos() as u64);
+            self.side_l.ht.evict();
+            self.side_r.ht.evict();
             match msg? {
                 AlignedMessage::WatermarkLeft(watermark) => {
                     for watermark_to_emit in self.handle_watermark(SideType::Left, watermark)? {
@@ -736,6 +739,11 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
                         .join_match_duration_ns
                         .with_label_values(&[&actor_id_str, "barrier"])
                         .inc_by(barrier_start_time.elapsed().as_nanos() as u64);
+                    self.metrics
+                        .join_epoch_interval
+                        .with_label_values(&[&actor_id_str])
+                        .set(epoch_start_time.elapsed().as_millis() as i64);
+                    epoch_start_time = minstant::Instant::now();
                     yield Message::Barrier(barrier);
                 }
             }

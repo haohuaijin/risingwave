@@ -18,8 +18,9 @@ anyhow = "1"
 apache-avro = { git = "https://github.com/risingwavelabs/avro", branch = "waruto/modify-decimal", features = ["snappy", "zstandard", "bzip", "xz"] }
 async-trait = "0.1"
 aws-config = { workspace = true }
+aws-sdk-ec2 = { workspace = true }
 aws-sdk-kinesis = { workspace = true } 
-aws-sdk-s3 = { workspace = true } 
+aws-sdk-s3 = { workspace = true }
 aws-smithy-http = { workspace = true }
 aws-types = { workspace = true }
 bincode = "1"

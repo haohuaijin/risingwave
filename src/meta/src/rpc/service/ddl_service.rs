@@ -12,8 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::collections::HashMap;
+
+use anyhow::anyhow;
 use risingwave_common::util::column_index_mapping::ColIndexMapping;
+use risingwave_connector::common::AwsPrivateLinks;
+use risingwave_connector::source::kafka::{KAFKA_PROPS_BROKER_KEY, KAFKA_PROPS_BROKER_KEY_ALIAS};
+use risingwave_connector::source::KAFKA_CONNECTOR;
 use risingwave_pb::catalog::table::OptionalAssociatedSourceId;
+use risingwave_pb::catalog::{connection, Connection};
 use risingwave_pb::ddl_service::ddl_service_server::DdlService;
 use risingwave_pb::ddl_service::drop_table_request::SourceId as ProstSourceId;
 use risingwave_pb::ddl_service::*;
@@ -25,10 +32,11 @@ use crate::manager::{
     CatalogManagerRef, ClusterManagerRef, FragmentManagerRef, IdCategory, IdCategoryType,
     MetaSrvEnv, StreamingJob,
 };
+use crate::rpc::cloud_provider::AwsEc2Client;
 use crate::rpc::ddl_controller::{DdlCommand, DdlController, StreamingJobId};
 use crate::storage::MetaStore;
 use crate::stream::{visit_fragment, GlobalStreamManagerRef, SourceManagerRef};
-use crate::MetaResult;
+use crate::{MetaError, MetaResult};
 
 #[derive(Clone)]
 pub struct DdlServiceImpl<S: MetaStore> {
@@ -36,6 +44,7 @@ pub struct DdlServiceImpl<S: MetaStore> {
 
     catalog_manager: CatalogManagerRef<S>,
     ddl_controller: DdlController<S>,
+    aws_client: Option<AwsEc2Client>,
 }
 
 impl<S> DdlServiceImpl<S>
@@ -45,6 +54,7 @@ where
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         env: MetaSrvEnv<S>,
+        aws_client: Option<AwsEc2Client>,
         catalog_manager: CatalogManagerRef<S>,
         stream_manager: GlobalStreamManagerRef<S>,
         source_manager: SourceManagerRef<S>,
@@ -65,7 +75,27 @@ where
             env,
             catalog_manager,
             ddl_controller,
+            aws_client,
         }
+    }
+}
+
+#[inline(always)]
+fn is_kafka_source(with_properties: &HashMap<String, String>) -> bool {
+    const UPSTREAM_SOURCE_KEY: &str = "connector";
+    with_properties
+        .get(UPSTREAM_SOURCE_KEY)
+        .unwrap_or(&"".to_string())
+        .to_lowercase()
+        .eq(KAFKA_CONNECTOR)
+}
+
+#[inline(always)]
+fn kafka_props_broker_key(with_properties: &HashMap<String, String>) -> &str {
+    if with_properties.contains_key(KAFKA_PROPS_BROKER_KEY) {
+        KAFKA_PROPS_BROKER_KEY
+    } else {
+        KAFKA_PROPS_BROKER_KEY_ALIAS
     }
 }
 
@@ -153,6 +183,10 @@ where
         request: Request<CreateSourceRequest>,
     ) -> Result<Response<CreateSourceResponse>, Status> {
         let mut source = request.into_inner().get_source()?.clone();
+
+        // resolve private links before starting the DDL procedure
+        self.resolve_private_link_info(&mut source.properties)
+            .await?;
 
         let id = self.gen_unique_id::<{ IdCategory::Table }>().await?;
         source.id = id;
@@ -535,6 +569,71 @@ where
             ddl_progress: self.ddl_controller.get_ddl_progress().await,
         }))
     }
+
+    async fn create_connection(
+        &self,
+        request: Request<CreateConnectionRequest>,
+    ) -> Result<Response<CreateConnectionResponse>, Status> {
+        if self.aws_client.is_none() {
+            return Err(Status::from(MetaError::unavailable(
+                "AWS client is not configured".into(),
+            )));
+        }
+
+        let req = request.into_inner();
+        if req.payload.is_none() {
+            return Err(Status::invalid_argument("request is empty"));
+        }
+
+        match req.payload.unwrap() {
+            create_connection_request::Payload::PrivateLink(link) => {
+                let cli = self.aws_client.as_ref().unwrap();
+                let private_link_svc = cli
+                    .create_aws_private_link(&link.service_name, &link.availability_zones)
+                    .await?;
+
+                let id = self.gen_unique_id::<{ IdCategory::Connection }>().await?;
+                let connection = Connection {
+                    id,
+                    name: link.service_name.clone(),
+                    info: Some(connection::Info::PrivateLinkService(private_link_svc)),
+                };
+
+                // save private link info to catalog
+                self.ddl_controller
+                    .run_command(DdlCommand::CreateConnection(connection))
+                    .await?;
+
+                Ok(Response::new(CreateConnectionResponse {
+                    connection_id: id,
+                    version: 0,
+                }))
+            }
+        }
+    }
+
+    async fn list_connections(
+        &self,
+        _request: Request<ListConnectionsRequest>,
+    ) -> Result<Response<ListConnectionsResponse>, Status> {
+        let conns = self.catalog_manager.list_connections().await;
+        Ok(Response::new(ListConnectionsResponse {
+            connections: conns,
+        }))
+    }
+
+    async fn drop_connection(
+        &self,
+        request: Request<DropConnectionRequest>,
+    ) -> Result<Response<DropConnectionResponse>, Status> {
+        let req = request.into_inner();
+
+        self.ddl_controller
+            .run_command(DdlCommand::DropConnection(req.connection_name))
+            .await?;
+
+        Ok(Response::new(DropConnectionResponse {}))
+    }
 }
 
 impl<S> DdlServiceImpl<S>
@@ -544,5 +643,64 @@ where
     async fn gen_unique_id<const C: IdCategoryType>(&self) -> MetaResult<u32> {
         let id = self.env.id_gen_manager().generate::<C>().await? as u32;
         Ok(id)
+    }
+
+    async fn resolve_private_link_info(
+        &self,
+        properties: &mut HashMap<String, String>,
+    ) -> MetaResult<()> {
+        let mut dns_entries = vec![];
+        const UPSTREAM_SOURCE_PRIVATE_LINK_KEY: &str = "private.links";
+        if let Some(prop) = properties.get(UPSTREAM_SOURCE_PRIVATE_LINK_KEY) {
+            let links: AwsPrivateLinks = serde_json::from_str(prop).map_err(|e| anyhow!(e))?;
+
+            // if private link is required, get connection info from catalog
+            for link in &links.infos {
+                let conn = self
+                    .catalog_manager
+                    .get_connection_by_name(&link.service_name)
+                    .await?;
+
+                if let Some(info) = conn.info {
+                    match info {
+                        connection::Info::PrivateLinkService(svc) => {
+                            link.availability_zones.iter().for_each(|az| {
+                                svc.dns_entries.get(az).map_or((), |dns_name| {
+                                    dns_entries.push(format!("{}:{}", dns_name.clone(), link.port));
+                                });
+                            })
+                        }
+                    }
+                }
+            }
+        }
+
+        // store the rewrite rules in properties
+        if is_kafka_source(properties) && !dns_entries.is_empty() {
+            let broker_key = kafka_props_broker_key(properties);
+            let servers = properties
+                .get(broker_key)
+                .cloned()
+                .ok_or(MetaError::from(anyhow!(
+                    "Must specify brokers in WITH clause",
+                )))?;
+
+            let broker_addrs = servers.split(',').collect::<Vec<&str>>();
+            if broker_addrs.len() != dns_entries.len() {
+                return Err(MetaError::from(anyhow!(
+                    "The number of private link dns entries does not match the number of kafka brokers.\
+                     dns entries: {:?}, kafka brokers: {:?}",
+                    dns_entries,
+                    broker_addrs,
+                )));
+            }
+
+            // save private link dns names into source properties, which
+            // will be extracted into KafkaProperties
+            tracing::info!("private link broker address: {:?}", dns_entries);
+            const PRIVATE_LINK_DNS_KEY: &str = "private.links.dns.names";
+            properties.insert(PRIVATE_LINK_DNS_KEY.to_string(), dns_entries.join(","));
+        }
+        Ok(())
     }
 }

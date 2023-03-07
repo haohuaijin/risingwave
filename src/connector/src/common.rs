@@ -25,9 +25,25 @@ use crate::source::kinesis::config::AwsConfigInfo;
 // sink.
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AwsPrivateLinkItem {
+    pub service_name: String,
+    pub availability_zones: Vec<String>,
+    pub port: u16,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AwsPrivateLinks {
+    pub provider: String,
+    pub infos: Vec<AwsPrivateLinkItem>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KafkaCommon {
     #[serde(rename = "properties.bootstrap.server", alias = "kafka.brokers")]
     pub brokers: String,
+
+    #[serde(rename = "private.links.dns.names")]
+    pub private_link_dns_names: Option<String>,
 
     #[serde(rename = "topic", alias = "kafka.topic")]
     pub topic: String,

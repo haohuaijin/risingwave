@@ -22,7 +22,7 @@ use await_tree::InstrumentAwait;
 use futures::Stream;
 use futures_async_stream::try_stream;
 use itertools::Itertools;
-use risingwave_common::array::{Array, ArrayImpl, Op, StreamChunk};
+use risingwave_common::array::{Op, StreamChunk};
 use risingwave_common::buffer::BitmapBuilder;
 use risingwave_common::hash::{ActorMapping, ExpandedActorMapping, VirtualNode};
 use risingwave_common::util::hash_util::Crc32FastBuilder;
@@ -106,7 +106,7 @@ impl DispatchExecutorInner {
     /// Add new dispatchers to the executor. Will check whether their ids are unique.
     fn add_dispatchers<'a>(
         &mut self,
-        new_dispatchers: impl IntoIterator<Item=&'a ProstDispatcher>,
+        new_dispatchers: impl IntoIterator<Item = &'a ProstDispatcher>,
     ) -> StreamResult<()> {
         let new_dispatchers: Vec<_> = new_dispatchers
             .into_iter()
@@ -252,7 +252,7 @@ impl DispatchExecutor {
 }
 
 impl StreamConsumer for DispatchExecutor {
-    type BarrierStream = impl Stream<Item=StreamResult<Barrier>> + Send;
+    type BarrierStream = impl Stream<Item = StreamResult<Barrier>> + Send;
 
     fn execute(mut self: Box<Self>) -> Self::BarrierStream {
         #[try_stream]
@@ -415,7 +415,7 @@ macro_rules! define_dispatcher_associated_types {
     };
 }
 
-pub trait DispatchFuture<'a> = Future<Output=StreamResult<()>> + Send;
+pub trait DispatchFuture<'a> = Future<Output = StreamResult<()>> + Send;
 
 pub trait Dispatcher: Debug + 'static {
     type DataFuture<'a>: DispatchFuture<'a>;
@@ -430,7 +430,7 @@ pub trait Dispatcher: Debug + 'static {
     fn dispatch_watermark(&mut self, watermark: Watermark) -> Self::WatermarkFuture<'_>;
 
     /// Add new outputs to the dispatcher.
-    fn add_outputs(&mut self, outputs: impl IntoIterator<Item=BoxedOutput>);
+    fn add_outputs(&mut self, outputs: impl IntoIterator<Item = BoxedOutput>);
     /// Remove outputs to `actor_ids` from the dispatcher.
     fn remove_outputs(&mut self, actor_ids: &HashSet<ActorId>);
 
@@ -501,7 +501,7 @@ impl Dispatcher for RoundRobinDataDispatcher {
         }
     }
 
-    fn add_outputs(&mut self, outputs: impl IntoIterator<Item=BoxedOutput>) {
+    fn add_outputs(&mut self, outputs: impl IntoIterator<Item = BoxedOutput>) {
         self.outputs.extend(outputs.into_iter());
     }
 
@@ -562,7 +562,7 @@ impl HashDataDispatcher {
 impl Dispatcher for HashDataDispatcher {
     define_dispatcher_associated_types!();
 
-    fn add_outputs(&mut self, outputs: impl IntoIterator<Item=BoxedOutput>) {
+    fn add_outputs(&mut self, outputs: impl IntoIterator<Item = BoxedOutput>) {
         self.outputs.extend(outputs.into_iter());
     }
 
@@ -718,7 +718,7 @@ pub struct BroadcastDispatcher {
 
 impl BroadcastDispatcher {
     pub fn new(
-        outputs: impl IntoIterator<Item=BoxedOutput>,
+        outputs: impl IntoIterator<Item = BoxedOutput>,
         output_indices: Vec<usize>,
         dispatcher_id: DispatcherId,
     ) -> Self {
@@ -730,8 +730,8 @@ impl BroadcastDispatcher {
     }
 
     fn into_pairs(
-        outputs: impl IntoIterator<Item=BoxedOutput>,
-    ) -> impl Iterator<Item=(ActorId, BoxedOutput)> {
+        outputs: impl IntoIterator<Item = BoxedOutput>,
+    ) -> impl Iterator<Item = (ActorId, BoxedOutput)> {
         outputs
             .into_iter()
             .map(|output| (output.actor_id(), output))
@@ -772,7 +772,7 @@ impl Dispatcher for BroadcastDispatcher {
         }
     }
 
-    fn add_outputs(&mut self, outputs: impl IntoIterator<Item=BoxedOutput>) {
+    fn add_outputs(&mut self, outputs: impl IntoIterator<Item = BoxedOutput>) {
         self.outputs.extend(Self::into_pairs(outputs));
     }
 
@@ -829,7 +829,7 @@ impl SimpleDispatcher {
 impl Dispatcher for SimpleDispatcher {
     define_dispatcher_associated_types!();
 
-    fn add_outputs(&mut self, outputs: impl IntoIterator<Item=BoxedOutput>) {
+    fn add_outputs(&mut self, outputs: impl IntoIterator<Item = BoxedOutput>) {
         self.output.extend(outputs);
         assert!(self.output.len() <= 2);
     }
@@ -1042,7 +1042,7 @@ mod tests {
                 ..Default::default()
             },
         )
-            .unwrap();
+        .unwrap();
 
         let simple_dispatcher_id = 888;
         let simple_dispatcher = DispatcherImpl::new(
@@ -1055,7 +1055,7 @@ mod tests {
                 ..Default::default()
             },
         )
-            .unwrap();
+        .unwrap();
 
         let executor = Box::new(DispatchExecutor::new(
             input,
@@ -1064,7 +1064,7 @@ mod tests {
             ctx.clone(),
             metrics,
         ))
-            .execute();
+        .execute();
         pin_mut!(executor);
 
         // 2. Take downstream receivers.

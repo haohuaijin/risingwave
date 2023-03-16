@@ -250,7 +250,10 @@ pub fn start(opts: MetaNodeOpts) -> Pin<Box<dyn Future<Output = ()> + Send>> {
                 sstable_size_mb: Some(opts.sstable_size_mb),
                 block_size_kb: Some(opts.block_size_kb),
                 bloom_false_positive: Some(opts.bloom_false_positive),
-                state_store: Some(opts.state_store.unwrap_or_default()),
+                state_store: Some(
+                    opts.state_store
+                        .unwrap_or_else(|| "hummock+memory".to_string()),
+                ),
                 data_directory: Some(opts.data_directory),
                 backup_storage_url: Some(opts.backup_storage_url),
                 backup_storage_directory: Some(opts.backup_storage_directory),

@@ -78,6 +78,7 @@ mod tests;
 mod versioning;
 pub use versioning::HummockVersionSafePoint;
 use versioning::*;
+mod checkpoint;
 mod compaction;
 mod worker;
 
@@ -114,6 +115,9 @@ pub struct HummockManager<S: MetaStore> {
 
     compactor_manager: CompactorManagerRef,
     event_sender: HummockManagerEventSender,
+
+    object_store: ObjectStoreRef,
+    checkpoint_path: String,
 }
 
 pub type HummockManagerRef<S> = Arc<HummockManager<S>>;
@@ -163,6 +167,7 @@ use risingwave_hummock_sdk::compaction_group::{StateTableId, StaticCompactionGro
 use risingwave_hummock_sdk::table_stats::{
     add_prost_table_stats_map, purge_prost_table_stats, ProstTableStatsMap,
 };
+use risingwave_object_store::object::ObjectStoreRef;
 use risingwave_pb::catalog::Table;
 use risingwave_pb::hummock::version_update_payload::Payload;
 use risingwave_pb::hummock::CompactionGroupInfo as ProstCompactionGroup;
@@ -197,6 +202,7 @@ pub(crate) use start_measure_real_process_timer;
 use super::compaction::ManualCompactionSelector;
 use super::Compactor;
 use crate::hummock::compaction::compaction_config::CompactionConfigBuilder;
+use crate::hummock::manager::checkpoint::{checkpoint_path, object_store_client};
 use crate::hummock::manager::compaction_group_manager::CompactionGroupManager;
 use crate::hummock::manager::worker::HummockManagerEventSender;
 
@@ -277,6 +283,9 @@ where
         compaction_group_manager: tokio::sync::RwLock<CompactionGroupManager>,
         catalog_manager: CatalogManagerRef<S>,
     ) -> Result<HummockManagerRef<S>> {
+        let object_store =
+            Arc::new(object_store_client(env.system_params_manager().get_params().await).await);
+        let checkpoint_path = checkpoint_path(&env.system_params_manager().get_params().await);
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
         let instance = HummockManager {
             env,
@@ -301,6 +310,8 @@ where
                 current_epoch: INVALID_EPOCH,
             }),
             event_sender: tx,
+            object_store,
+            checkpoint_path,
         };
         let instance = Arc::new(instance);
         instance.start_worker(rx).await;

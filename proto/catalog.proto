@@ -164,7 +164,6 @@ message Table {
     uint32 associated_source_id = 9;
   }
   TableType table_type = 10;
-  repeated int32 distribution_key = 12;
   // pk_indices of the corresponding materialize operator's output.
   repeated int32 stream_key = 13;
   bool append_only = 14;

@@ -160,11 +160,11 @@ where
             .iter()
             .map(|col_order| OrderType::from_protobuf(col_order.get_order_type().unwrap()))
             .collect();
-        let dist_key_indices: Vec<usize> = table_catalog
-            .distribution_key
-            .iter()
-            .map(|dist_index| *dist_index as usize)
-            .collect();
+        // let dist_key_indices: Vec<usize> = table_catalog
+        //     .distribution_key
+        //     .iter()
+        //     .map(|dist_index| *dist_index as usize)
+        //     .collect();
 
         let pk_indices = table_catalog
             .pk
@@ -173,16 +173,11 @@ where
             .collect_vec();
 
         // FIXME(yuhao): only use `dist_key_in_pk` in the proto
-        let dist_key_in_pk_indices = if table_catalog.get_dist_key_in_pk().is_empty() {
-            get_dist_key_in_pk_indices(&dist_key_indices, &pk_indices)
-        } else {
-            table_catalog
-                .get_dist_key_in_pk()
-                .iter()
-                .map(|idx| *idx as usize)
-                .collect()
-        };
-
+        let dist_key_in_pk_indices = table_catalog
+        .get_dist_key_in_pk()
+        .iter()
+        .map(|idx| *idx as usize)
+        .collect();
         let table_option = TableOption::build_table_option(table_catalog.get_properties());
         let local_state_store = store
             .new_local(NewLocalOptions {

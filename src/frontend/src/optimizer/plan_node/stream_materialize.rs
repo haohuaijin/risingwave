@@ -184,7 +184,6 @@ impl StreamMaterialize {
             columns,
             pk,
             stream_key,
-            distribution_key,
             table_type,
             append_only,
             owner: risingwave_common::catalog::DEFAULT_SUPER_USER_ID,

@@ -120,6 +120,21 @@ impl TableCatalogBuilder {
     /// implementing the table's bloom filter or other storage optimization techniques.
     pub fn build(self, distribution_key: Vec<usize>, read_prefix_len_hint: usize) -> TableCatalog {
         assert!(self.read_prefix_len_hint <= self.pk.len());
+        let pk_indices = self.pk.iter().map(|pk|pk.column_index).collect_vec();
+        let dist_key_in_pk_indices = distribution_key
+        .iter()
+        .map(|&di| {
+            pk_indices
+                .iter()
+                .position(|&pi| di == pi)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "distribution key {:?} must be a subset of primary key {:?}",
+                        distribution_key, pk_indices
+                    )
+                })
+        })
+        .collect_vec();
         let watermark_columns = match self.watermark_columns {
             Some(w) => w,
             None => FixedBitSet::with_capacity(self.columns.len()),
@@ -131,7 +146,6 @@ impl TableCatalogBuilder {
             columns: self.columns.clone(),
             pk: self.pk,
             stream_key: vec![],
-            distribution_key,
             // NOTE: This should be altered if `TableCatalogBuilder` is used to build something
             // other than internal tables.
             table_type: TableType::Internal,
@@ -150,7 +164,7 @@ impl TableCatalogBuilder {
             read_prefix_len_hint,
             version: None, // the internal table is not versioned and can't be schema changed
             watermark_columns,
-            dist_key_in_pk: self.dist_key_in_pk.unwrap_or(vec![]),
+            dist_key_in_pk: dist_key_in_pk_indices,
         }
     }
 

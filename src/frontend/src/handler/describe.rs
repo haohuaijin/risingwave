@@ -143,10 +143,15 @@ pub fn handle_describe(handler_args: HandlerArgs, table_name: ObjectName) -> Res
             .map(|(_, x)| x.name().to_string())
             .collect_vec();
 
-        let distributed_by_columns = index_table
-            .distribution_key
+            let pk_column =  index_table
+            .pk
             .iter()
-            .map(|&x| index_table.columns[x].name().to_string())
+            .map(|&x| index_table.columns[x.column_index])
+            .collect_vec();
+        let distributed_by_columns = index_table
+            .dist_key_in_pk
+            .iter()
+            .map(|&x| pk_column[x].name().to_string())
             .collect_vec();
 
         Row::new(vec![

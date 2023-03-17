@@ -84,9 +84,6 @@ pub struct TableCatalog {
     /// tables, and internal tables.
     pub table_type: TableType,
 
-    /// Distribution key column indices.
-    pub distribution_key: Vec<usize>,
-
     /// The append-only attribute is derived from `StreamMaterialize` and `StreamTableScan` relies
     /// on this to derive an append-only stream plan.
     pub append_only: bool,
@@ -294,7 +291,7 @@ impl TableCatalog {
             pk: self.pk.clone(),
             stream_key: self.stream_key.clone(),
             columns: self.columns.iter().map(|c| c.column_desc.clone()).collect(),
-            distribution_key: self.distribution_key.clone(),
+            dist_key_in_pk_indices: self.dist_key_in_pk.clone(),
             append_only: self.append_only,
             retention_seconds: table_options
                 .retention_seconds
@@ -311,8 +308,8 @@ impl TableCatalog {
         self.name.as_ref()
     }
 
-    pub fn distribution_key(&self) -> &[usize] {
-        self.distribution_key.as_ref()
+    pub fn dist_key_in_pk_indices(&self) -> &[usize] {
+        &self.dist_key_in_pk.as_ref()
     }
 
     pub fn to_internal_table_prost(&self) -> ProstTable {
@@ -352,11 +349,6 @@ impl TableCatalog {
                 .associated_source_id
                 .map(|source_id| OptionalAssociatedSourceId::AssociatedSourceId(source_id.into())),
             table_type: self.table_type.to_prost() as i32,
-            distribution_key: self
-                .distribution_key
-                .iter()
-                .map(|k| *k as i32)
-                .collect_vec(),
             append_only: self.append_only,
             owner: self.owner,
             properties: self.properties.inner().clone().into_iter().collect(),
@@ -410,11 +402,6 @@ impl From<ProstTable> for TableCatalog {
             pk,
             columns,
             table_type: TableType::from_prost(table_type),
-            distribution_key: tb
-                .distribution_key
-                .iter()
-                .map(|k| *k as usize)
-                .collect_vec(),
             stream_key: tb.stream_key.iter().map(|x| *x as _).collect(),
             append_only: tb.append_only,
             owner: tb.owner,
@@ -502,7 +489,6 @@ mod tests {
             pk: vec![ColumnOrder::new(0, OrderType::ascending()).to_protobuf()],
             stream_key: vec![0],
             dependent_relations: vec![],
-            distribution_key: vec![],
             optional_associated_source_id: OptionalAssociatedSourceId::AssociatedSourceId(233)
                 .into(),
             append_only: false,
@@ -567,7 +553,6 @@ mod tests {
                 ],
                 stream_key: vec![0],
                 pk: vec![ColumnOrder::new(0, OrderType::ascending())],
-                distribution_key: vec![],
                 append_only: false,
                 owner: risingwave_common::catalog::DEFAULT_SUPER_USER_ID,
                 properties: WithOptions::new(HashMap::from([(

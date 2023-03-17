@@ -110,7 +110,6 @@ async fn compaction_test(
         columns: vec![],
         pk: vec![],
         dependent_relations: vec![],
-        distribution_key: vec![],
         stream_key: vec![],
         owner: 0,
         properties: HashMap::<String, String>::from([(

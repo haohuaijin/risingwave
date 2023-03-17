@@ -997,9 +997,8 @@ fn derive_partitions(
     }
 
     for scan_range in scan_ranges {
-        let vnode = scan_range.try_compute_vnode(
-            &table_desc.distribution_key,
-            &table_desc.order_column_indices(),
+        let vnode = scan_range.try_compute_vnode_with_dist_key_in_pk_indices(
+            &table_desc.dist_key_in_pk_indices,
         );
         match vnode {
             None => {

@@ -33,10 +33,8 @@ pub struct TableDesc {
     pub pk: Vec<ColumnOrder>,
     /// All columns in the table, noticed it is NOT sorted by columnId in the vec.
     pub columns: Vec<ColumnDesc>,
-    /// Distribution keys of this table, which corresponds to the corresponding column of the
-    /// index. e.g., if `distribution_key = [1, 2]`, then `columns[1]` and `columns[2]` are used
-    /// as distribution key.
-    pub distribution_key: Vec<usize>,
+
+    pub dist_key_in_pk_indices: Vec<usize>,
     /// Column indices for primary keys.
     pub stream_key: Vec<usize>,
 
@@ -78,27 +76,27 @@ impl TableDesc {
     }
 
     pub fn to_protobuf(&self) -> StorageTableDesc {
-        let dist_key_indices: Vec<u32> = self.distribution_key.iter().map(|&k| k as u32).collect();
-        let pk_indices: Vec<u32> = self
-            .pk
-            .iter()
-            .map(|v| v.to_protobuf().column_index)
-            .collect();
-        let dist_key_in_pk_indices = dist_key_indices
-            .iter()
-            .map(|&di| {
-                pk_indices
-                    .iter()
-                    .position(|&pi| di == pi)
-                    .unwrap_or_else(|| {
-                        panic!(
-                            "distribution key {:?} must be a subset of primary key {:?}",
-                            dist_key_indices, pk_indices
-                        )
-                    })
-            })
-            .map(|d| d as u32)
-            .collect_vec();
+        let dist_key_in_pk_indices: Vec<u32> = self.dist_key_in_pk_indices.iter().map(|&k| k as u32).collect();
+        // let pk_indices: Vec<u32> = self
+        //     .pk
+        //     .iter()
+        //     .map(|v| v.to_protobuf().column_index)
+        //     .collect();
+        // let dist_key_in_pk_indices = dist_key_indices
+        //     .iter()
+        //     .map(|&di| {
+        //         pk_indices
+        //             .iter()
+        //             .position(|&pi| di == pi)
+        //             .unwrap_or_else(|| {
+        //                 panic!(
+        //                     "distribution key {:?} must be a subset of primary key {:?}",
+        //                     dist_key_indices, pk_indices
+        //                 )
+        //             })
+        //     })
+        //     .map(|d| d as u32)
+        //     .collect_vec();
         StorageTableDesc {
             table_id: self.table_id.into(),
             columns: self.columns.iter().map(Into::into).collect(),

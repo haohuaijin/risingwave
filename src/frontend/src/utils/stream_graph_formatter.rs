@@ -81,7 +81,7 @@ impl StreamGraphFormatter {
         let tb = TableCatalog::from(tb.clone());
         writeln!(
             f,
-            " Table {} {{ columns: [{}], primary key: {:?}, value indices: {:?}, distribution key: {:?}, read pk prefix len hint: {:?}{} }}",
+            " Table {} {{ columns: [{}], primary key: {:?}, value indices: {:?}, distribution key in pk indices: {:?}, read pk prefix len hint: {:?}{} }}",
             tb.id,
             tb.columns
                 .iter()
@@ -95,7 +95,7 @@ impl StreamGraphFormatter {
                 .join(", "),
             tb.pk,
             tb.value_indices,
-            tb.distribution_key,
+            tb.dist_key_in_pk,
             tb.read_prefix_len_hint,
             if let Some(vnode_col_idx) = tb.vnode_col_index {
                 format!(", vnode column idx: {}", vnode_col_idx)
